@@ -86,6 +86,15 @@
     <max>3</max>
    </entry>
  </group>
+ <group name="ControlMethods">
+  <entry key="MiddlePress" type="Enum" >
+   <default>Zoom</default>
+   <choices>
+    <choice name="Zoom" />
+    <choice name="Disabled" />
+   </choices>
+  </entry>
+ </group>
  <group name="General" >
   <entry key="ShellOpenFileInTabs" type="Bool" >
    <default>false</default>

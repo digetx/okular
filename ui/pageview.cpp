@@ -134,6 +134,7 @@ public:
     QPoint mouseSelectPos;
     int mouseMidLastY;
     bool mouseSelecting;
+    bool mouseZooming;
     QRect mouseSelectionRect;
     QColor mouseSelectionColor;
     bool mouseTextSelecting;
@@ -289,6 +290,7 @@ PageView::PageView( QWidget *parent, Okular::Document *document )
     d->zoomMode = PageView::ZoomFitWidth;
     d->zoomFactor = 1.0;
     d->mouseSelecting = false;
+    d->mouseZooming = false;
     d->mouseTextSelecting = false;
     d->mouseOnRect = false;
     d->mouseAnn = 0;
@@ -1714,7 +1716,7 @@ void PageView::keyPressEvent( QKeyEvent * e )
     e->accept();
 
     // if performing a selection or dyn zooming, disable keys handling
-    if ( ( d->mouseSelecting && e->key() != Qt::Key_Escape ) || ( QApplication::mouseButtons () & Qt::MidButton ) )
+    if ( ( d->mouseSelecting && e->key() != Qt::Key_Escape ) || d->mouseZooming )
         return;
 
     // if viewport is moving, disable keys handling
@@ -1893,7 +1895,7 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
         return;
 
     // if holding mouse mid button, perform zoom
-    if ( e->buttons() & Qt::MidButton )
+    if ( d->mouseZooming )
     {
         int mouseY = e->globalPos().y();
         int deltaY = d->mouseMidLastY - mouseY;
@@ -2077,7 +2079,7 @@ void PageView::mousePressEvent( QMouseEvent * e )
         return;
 
     // if performing a selection or dyn zooming, disable mouse press
-    if ( d->mouseSelecting || ( e->button() != Qt::MidButton && ( e->buttons() & Qt::MidButton) ) || d->viewportMoveActive )
+    if ( d->mouseSelecting || ( e->button() != Qt::MidButton && d->mouseZooming) || d->viewportMoveActive )
         return;
 
     // if the page is scrolling, stop it
@@ -2090,8 +2092,12 @@ void PageView::mousePressEvent( QMouseEvent * e )
     // if pressing mid mouse button while not doing other things, begin 'continuous zoom' mode
     if ( e->button() == Qt::MidButton )
     {
-        d->mouseMidLastY = e->globalPos().y();
-        setCursor( Qt::SizeVerCursor );
+        if ( middlePressZoomEnabled() )
+        {
+            d->mouseMidLastY = e->globalPos().y();
+            d->mouseZooming = true;
+            setCursor( Qt::SizeVerCursor );
+        }
         return;
     }
 
@@ -2340,10 +2346,14 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
     // handle mode indepent mid buttom zoom
     if ( e->button() == Qt::MidButton )
     {
-        // request pixmaps since it was disabled during drag
-        slotRequestVisiblePixmaps();
-        // the cursor may now be over a link.. update it
-        updateCursor( eventPos );
+        if (d->mouseZooming)
+        {
+            // request pixmaps since it was disabled during drag
+            slotRequestVisiblePixmaps();
+            // the cursor may now be over a link.. update it
+            updateCursor( eventPos );
+            d->mouseZooming = false;
+        }
         return;
     }
 
@@ -4203,6 +4213,11 @@ void PageView::addWebShortcutsMenu( KMenu * menu, const QString & text )
         }
     }
 #endif
+}
+
+bool PageView::middlePressZoomEnabled() const
+{
+    return Okular::Settings::middlePress() == Okular::Settings::EnumMiddlePress::Zoom;
 }
 
 //BEGIN private SLOTS

@@ -191,6 +191,9 @@ Q_OBJECT
         // called from slots to turn off trim modes mutually exclusive to id
         void updateTrimMode( int except_id );
 
+        // middle mouse button press behaviour
+        bool middlePressZoomEnabled() const;
+
         // don't want to expose classes in here
         class PageViewPrivate * d;
 
