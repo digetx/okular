@@ -352,6 +352,59 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" >
+     <property name="title">
+      <string>Control Methods</string>
+     </property>
+     <layout class="QVBoxLayout" >
+      <item>
+       <layout class="QHBoxLayout" >
+        <property name="spacing">
+         <number>6</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="textLabel4">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="text">
+           <string>Middle Button Behavior:</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="kcfg_MiddlePress">
+          <item>
+           <property name="text">
+            <string>Zoom Page</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Drag Page</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Auto Scroll</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Disabled</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <spacer>
      <property name="orientation" >
       <enum>Qt::Vertical</enum>

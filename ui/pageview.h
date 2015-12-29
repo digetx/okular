@@ -191,6 +191,12 @@ Q_OBJECT
         // called from slots to turn off trim modes mutually exclusive to id
         void updateTrimMode( int except_id );
 
+        // middle mouse button press behaviour
+        bool midButtonPressDisabled() const;
+        bool midButtonPressZoomEnabled() const;
+        bool midButtonPressDragEnabled() const;
+        bool midButtonPressAutoScrollEnabled() const;
+
         // don't want to expose classes in here
         class PageViewPrivate * d;
 
@@ -206,7 +212,7 @@ Q_OBJECT
         // activated by the viewport move timer
         void slotMoveViewport();
         // activated by the autoscroll timer (Shift+Up/Down keys)
-        void slotAutoScoll();
+        void slotAutoScroll();
         // activated by the dragScroll timer
         void slotDragScroll();
         // show the welcome message
