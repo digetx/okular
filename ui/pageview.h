@@ -193,6 +193,7 @@ Q_OBJECT
 
         // middle mouse button press behaviour
         bool middlePressZoomEnabled() const;
+        bool middlePressDragEnabled() const;
 
         // don't want to expose classes in here
         class PageViewPrivate * d;

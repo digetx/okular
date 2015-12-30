@@ -1950,10 +1950,14 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
 
     bool leftButton = (e->buttons() == Qt::LeftButton);
     bool rightButton = (e->buttons() == Qt::RightButton);
-    switch ( d->mouseMode )
+    bool middleButtonDragging = ( e->buttons() == Qt::MidButton ) && middlePressDragEnabled();
+
+    int mode = middleButtonDragging ? Okular::Settings::EnumMouseMode::Browse : d->mouseMode;
+
+    switch ( mode )
     {
         case Okular::Settings::EnumMouseMode::Browse:
-            if ( leftButton )
+            if ( leftButton || middleButtonDragging )
             {
                 d->leftClickTimer.stop();
 
@@ -2079,7 +2083,7 @@ void PageView::mousePressEvent( QMouseEvent * e )
         return;
 
     // if performing a selection or dyn zooming, disable mouse press
-    if ( d->mouseSelecting || ( e->button() != Qt::MidButton && d->mouseZooming) || d->viewportMoveActive )
+    if ( d->mouseSelecting || ( ( e->button() != Qt::MidButton ) && d->mouseZooming) || d->viewportMoveActive )
         return;
 
     // if the page is scrolling, stop it
@@ -2098,7 +2102,9 @@ void PageView::mousePressEvent( QMouseEvent * e )
             d->mouseZooming = true;
             setCursor( Qt::SizeVerCursor );
         }
-        return;
+
+        if ( !middlePressDragEnabled() )
+            return;
     }
 
     const QPoint eventPos = contentAreaPoint( e->pos() );
@@ -2128,19 +2134,22 @@ void PageView::mousePressEvent( QMouseEvent * e )
 
     // handle mode dependant mouse press actions
     bool leftButton = e->button() == Qt::LeftButton,
-         rightButton = e->button() == Qt::RightButton;
+         rightButton = e->button() == Qt::RightButton,
+         middleButton = e->button() == Qt::MidButton;
 
 //   Not sure we should erase the selection when clicking with left.
-     if ( d->mouseMode != Okular::Settings::EnumMouseMode::TextSelect )
+     if ( !middleButton && ( d->mouseMode != Okular::Settings::EnumMouseMode::TextSelect ) )
        textSelectionClear();
 
-    switch ( d->mouseMode )
+    int mode = middleButton ? Okular::Settings::EnumMouseMode::Browse : d->mouseMode;
+
+    switch ( mode )
     {
         case Okular::Settings::EnumMouseMode::Browse:   // drag start / click / link following
-            if ( leftButton )
+            if ( leftButton || middleButton )
             {
                 PageViewItem * pageItem = 0;
-                if ( ( e->modifiers() & Qt::ControlModifier ) && ( pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() ) ) )
+                if ( leftButton && ( e->modifiers() & Qt::ControlModifier ) && ( pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() ) ) )
                 {
                     // find out normalized mouse coords inside current item
                     const QRect & itemRect = pageItem->uncroppedGeometry();
@@ -2154,14 +2163,14 @@ void PageView::mousePressEvent( QMouseEvent * e )
                     if ( d->mouseAnn && !d->mouseAnn->canBeMoved() )
                         d->mouseAnn = 0;
                 }
-                if ( d->mouseAnn )
+                if ( leftButton && d->mouseAnn )
                 {
                     d->mouseAnn->setFlags( d->mouseAnn->flags() | Okular::Annotation::BeingMoved );
                     d->mouseAnnPageNum = pageItem->pageNumber();
                 }
                 else
                 {
-                    d->mouseGrabPos = d->mouseOnRect ? QPoint() : d->mousePressPos;
+                    d->mouseGrabPos = ( d->mouseOnRect && leftButton ) ? QPoint() : d->mousePressPos;
                     if ( !d->mouseOnRect )
                         d->leftClickTimer.start( QApplication::doubleClickInterval() + 10 );
                 }
@@ -2318,6 +2327,7 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
 
     const bool leftButton = e->button() == Qt::LeftButton;
     const bool rightButton = e->button() == Qt::RightButton;
+    const bool middleButton = e->button() == Qt::MidButton;
 
     if ( d->mouseAnn && leftButton )
     {
@@ -2344,7 +2354,7 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
     const QPoint eventPos = contentAreaPoint( e->pos() );
 
     // handle mode indepent mid buttom zoom
-    if ( e->button() == Qt::MidButton )
+    if ( middleButton )
     {
         if (d->mouseZooming)
         {
@@ -2354,7 +2364,9 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
             updateCursor( eventPos );
             d->mouseZooming = false;
         }
-        return;
+
+        if ( !middlePressDragEnabled() )
+            return;
     }
 
     // if we're editing an annotation, dispatch event to it
@@ -2365,7 +2377,9 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
         return;
     }
 
-    switch ( d->mouseMode )
+    int mode = middleButton ? Okular::Settings::EnumMouseMode::Browse : d->mouseMode;
+
+    switch ( mode )
     {
         case Okular::Settings::EnumMouseMode::Browse:{
             // return the cursor to its normal state after dragging
@@ -4218,6 +4232,11 @@ void PageView::addWebShortcutsMenu( KMenu * menu, const QString & text )
 bool PageView::middlePressZoomEnabled() const
 {
     return Okular::Settings::middlePress() == Okular::Settings::EnumMiddlePress::Zoom;
+}
+
+bool PageView::middlePressDragEnabled() const
+{
+    return Okular::Settings::middlePress() == Okular::Settings::EnumMiddlePress::Drag;
 }
 
 //BEGIN private SLOTS

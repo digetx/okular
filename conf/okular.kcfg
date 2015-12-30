@@ -91,6 +91,7 @@
    <default>Zoom</default>
    <choices>
     <choice name="Zoom" />
+    <choice name="Drag" />
     <choice name="Disabled" />
    </choices>
   </entry>

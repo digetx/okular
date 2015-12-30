@@ -384,6 +384,11 @@
           </item>
           <item>
            <property name="text">
+            <string>Drag Page</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
             <string>Disabled</string>
            </property>
           </item>
