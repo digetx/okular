@@ -84,6 +84,7 @@
 #include "settings_core.h"
 #include "url_utils.h"
 #include "magnifierview.h"
+#include "autoscrollpopup.h"
 
 static int pageflags = PagePainter::Accessibility | PagePainter::EnhanceLinks |
                        PagePainter::EnhanceImages | PagePainter::Highlights |
@@ -162,6 +163,10 @@ public:
     // auto scroll
     int scrollIncrement;
     QTimer * autoScrollTimer;
+    QPoint mouseAutoScrollPosDelta;
+    AutoScrollPopup *autoScrollPopup;
+    bool mouseAutoScrollActive;
+    bool stopAutoScrollOnMiddleButtonRelease;
     // annotations
     PageViewAnnotator * annotator;
     //text annotation dialogs list
@@ -303,6 +308,8 @@ PageView::PageView( QWidget *parent, Okular::Document *document )
     d->viewportMoveTimer = 0;
     d->scrollIncrement = 0;
     d->autoScrollTimer = 0;
+    d->autoScrollPopup = new AutoScrollPopup(this);
+    d->mouseAutoScrollActive = false;
     d->annotator = 0;
     d->dirtyLayout = false;
     d->blockViewport = false;
@@ -1723,6 +1730,10 @@ void PageView::keyPressEvent( QKeyEvent * e )
     if ( d->viewportMoveActive )
         return;
 
+    // don't handle key event while mouse autoscroll is active
+    if ( d->mouseAutoScrollActive )
+        return;
+
     // move/scroll page by using keys
     switch ( e->key() )
     {
@@ -1785,7 +1796,7 @@ void PageView::keyPressEvent( QKeyEvent * e )
                 if ( d->autoScrollTimer->isActive() )
                     d->autoScrollTimer->stop();
                 else
-                    slotAutoScoll();
+                    slotAutoScroll();
                 return;
             }
             // else fall trhough
@@ -1798,6 +1809,8 @@ void PageView::keyPressEvent( QKeyEvent * e )
     {
         d->scrollIncrement = 0;
         d->autoScrollTimer->stop();
+        d->mouseAutoScrollActive = false;
+        d->autoScrollPopup->hide();
     }
 }
 
@@ -1815,6 +1828,8 @@ void PageView::keyReleaseEvent( QKeyEvent * e )
     {
         d->scrollIncrement = 0;
         d->autoScrollTimer->stop();
+        d->mouseAutoScrollActive = false;
+        d->autoScrollPopup->hide();
     }
 }
 
@@ -1890,6 +1905,14 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
     if ( d->items.isEmpty() )
         return;
 
+    if ( d->mouseAutoScrollActive )
+    {
+        d->mouseAutoScrollPosDelta = e->globalPos() - d->mousePressPos;
+
+        if ( d->mouseAutoScrollPosDelta.manhattanLength() > d->autoScrollPopup->iconRadiusSize() )
+            d->stopAutoScrollOnMiddleButtonRelease = true;
+    }
+
     // don't perform any mouse action when viewport is autoscrolling
     if ( d->viewportMoveActive )
         return;
@@ -1948,7 +1971,7 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
         return;
     }
 
-    bool leftButton = (e->buttons() == Qt::LeftButton);
+    bool leftButton = (e->button() == Qt::LeftButton) || (e->buttons() == Qt::LeftButton);
     bool rightButton = (e->buttons() == Qt::RightButton);
     bool middleButtonDragging = ( e->buttons() == Qt::MidButton ) && middlePressDragEnabled();
 
@@ -2065,6 +2088,10 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
             break;
 
         case Okular::Settings::EnumMouseMode::TextSelect:
+            // update selection area only if left button is pressed
+            if ( !leftButton )
+                break;
+
             // if mouse moves 5 px away from the press point and the document soupports text extraction, do 'textselection'
             if ( !d->mouseTextSelecting && !d->mousePressPos.isNull() && d->document->supportsSearching() && ( ( eventPos - d->mouseSelectPos ).manhattanLength() > 5 ) )
             {
@@ -2091,6 +2118,15 @@ void PageView::mousePressEvent( QMouseEvent * e )
     {
         d->scrollIncrement = 0;
         d->autoScrollTimer->stop();
+
+        // skip this event if mouse autoscroll is active
+        if ( d->mouseAutoScrollActive )
+        {
+            updateCursor( contentAreaPoint( e->pos() ) );
+            d->mouseAutoScrollActive = false;
+            d->autoScrollPopup->hide();
+            return;
+        }
     }
 
     // if pressing mid mouse button while not doing other things, begin 'continuous zoom' mode
@@ -2103,7 +2139,7 @@ void PageView::mousePressEvent( QMouseEvent * e )
             setCursor( Qt::SizeVerCursor );
         }
 
-        if ( !middlePressDragEnabled() )
+        if ( !middlePressDragEnabled() && !middlePressAutoScrollEnabled() )
             return;
     }
 
@@ -2136,6 +2172,32 @@ void PageView::mousePressEvent( QMouseEvent * e )
     bool leftButton = e->button() == Qt::LeftButton,
          rightButton = e->button() == Qt::RightButton,
          middleButton = e->button() == Qt::MidButton;
+
+    // start autoscrolling on middle mouse button press when corresponding behaviour mode selected
+    if ( middleButton && middlePressAutoScrollEnabled() )
+    {
+        d->mouseAutoScrollActive = true;
+        d->stopAutoScrollOnMiddleButtonRelease = false;
+        d->mouseAutoScrollPosDelta = QPoint();
+        // select popup icon based on available scrolling space
+        AutoScrollPopup::ScrollingDirection dir = AutoScrollPopup::Both;
+        bool haveHorizontalScrollSpace = ( horizontalScrollBar()->maximum() > 0 );
+        bool haveVerticalScrollSpace = ( verticalScrollBar()->maximum() > 0 );
+        if ( !haveHorizontalScrollSpace && haveVerticalScrollSpace )
+            dir = AutoScrollPopup::Vertical;
+        else if ( haveHorizontalScrollSpace && !haveVerticalScrollSpace )
+            dir = AutoScrollPopup::Horizontal;
+        d->autoScrollPopup->setDirection( dir );
+        // show autoscroll popup icon
+        d->autoScrollPopup->show( e->pos() );
+        // cancel active page dragging using left mouse button
+        d->mouseGrabPos = QPoint();
+        // always use arrow cursor while autoscrolling
+        setCursor( Qt::ArrowCursor );
+        // start the autoscroll timer
+        slotAutoScroll();
+        return;
+    }
 
 //   Not sure we should erase the selection when clicking with left.
      if ( !middleButton && ( d->mouseMode != Okular::Settings::EnumMouseMode::TextSelect ) )
@@ -2327,7 +2389,7 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
 
     const bool leftButton = e->button() == Qt::LeftButton;
     const bool rightButton = e->button() == Qt::RightButton;
-    const bool middleButton = e->button() == Qt::MidButton;
+    const bool middleButton = ( e->button() == Qt::MidButton ) || ( e->buttons() == Qt::MidButton );
 
     if ( d->mouseAnn && leftButton )
     {
@@ -2348,15 +2410,29 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
     }
 
     // don't perform any mouse action when viewport is autoscrolling
-    if ( d->viewportMoveActive )
+    if ( d->viewportMoveActive && !( middleButton && d->mouseAutoScrollActive ) )
         return;
 
     const QPoint eventPos = contentAreaPoint( e->pos() );
 
+    if ( d->mouseAutoScrollActive )
+    {
+        // stop autoscrolling
+        if ( d->stopAutoScrollOnMiddleButtonRelease )
+        {
+            d->autoScrollTimer->stop();
+            d->mouseAutoScrollActive = false;
+            d->autoScrollPopup->hide();
+            updateCursor( eventPos );
+        }
+        // stop autoscroll next time
+        d->stopAutoScrollOnMiddleButtonRelease = true;
+    }
+
     // handle mode indepent mid buttom zoom
     if ( middleButton )
     {
-        if (d->mouseZooming)
+        if ( d->mouseZooming )
         {
             // request pixmaps since it was disabled during drag
             slotRequestVisiblePixmaps();
@@ -3162,6 +3238,9 @@ void PageView::wheelEvent( QWheelEvent *e )
     if ( d->viewportMoveActive )
         return;
 
+    if ( d->mouseAutoScrollActive )
+        return;
+
     if ( !d->document->isOpened() )
     {
         QAbstractScrollArea::wheelEvent( e );
@@ -3950,6 +4029,10 @@ void PageView::updateCursor( const QPoint &p )
         else
             setCursor( Qt::ForbiddenCursor );
     }
+    else if ( d->mouseAutoScrollActive )
+    {
+        setCursor( Qt::ArrowCursor );
+    }
     else if ( pageItem )
     {
         double nX = pageItem->absToPageX(p.x());
@@ -4237,6 +4320,11 @@ bool PageView::middlePressZoomEnabled() const
 bool PageView::middlePressDragEnabled() const
 {
     return Okular::Settings::middlePress() == Okular::Settings::EnumMiddlePress::Drag;
+}
+
+bool PageView::middlePressAutoScrollEnabled() const
+{
+    return Okular::Settings::middlePress() == Okular::Settings::EnumMiddlePress::AutoScroll;
 }
 
 //BEGIN private SLOTS
@@ -4685,30 +4773,40 @@ void PageView::slotMoveViewport()
             (int)(y + diffY * convergeSpeed ) );
 }
 
-void PageView::slotAutoScoll()
+void PageView::slotAutoScroll()
 {
     // the first time create the timer
     if ( !d->autoScrollTimer )
     {
         d->autoScrollTimer = new QTimer( this );
         d->autoScrollTimer->setSingleShot( true );
-        connect( d->autoScrollTimer, SIGNAL(timeout()), this, SLOT(slotAutoScoll()) );
+        connect( d->autoScrollTimer, SIGNAL(timeout()), this, SLOT(slotAutoScroll()) );
     }
 
+    if ( d->mouseAutoScrollActive )
+    {
+        // update autoscroll position at a constant rate, about 60Hz
+        d->autoScrollTimer->start( 17 );
+        // re-use left button drag scrolling
+        d->dragScrollVector = d->mouseAutoScrollPosDelta;
+        d->dragScrollVector *= sqrt( d->dragScrollVector.manhattanLength() ) / 100;
+        slotDragScroll();
+    }
     // if scrollIncrement is zero, stop the timer
-    if ( !d->scrollIncrement )
+    else if ( !d->scrollIncrement )
     {
         d->autoScrollTimer->stop();
-        return;
     }
-
-    // compute delay between timer ticks and scroll amount per tick
-    int index = abs( d->scrollIncrement ) - 1;  // 0..9
-    const int scrollDelay[10] =  { 200, 100, 50, 30, 20, 30, 25, 20, 30, 20 };
-    const int scrollOffset[10] = {   1,   1,  1,  1,  1,  2,  2,  2,  4,  4 };
-    d->autoScrollTimer->start( scrollDelay[ index ] );
-    int delta = d->scrollIncrement > 0 ? scrollOffset[ index ] : -scrollOffset[ index ];
-    verticalScrollBar()->setValue(verticalScrollBar()->value() + delta);
+    else
+    {
+        // compute delay between timer ticks and scroll amount per tick
+        int index = abs( d->scrollIncrement ) - 1;  // 0..9
+        const int scrollDelay[10] =  { 200, 100, 50, 30, 20, 30, 25, 20, 30, 20 };
+        const int scrollOffset[10] = {   1,   1,  1,  1,  1,  2,  2,  2,  4,  4 };
+        d->autoScrollTimer->start( scrollDelay[ index ] );
+        int delta = d->scrollIncrement > 0 ? scrollOffset[ index ] : -scrollOffset[ index ];
+        verticalScrollBar()->setValue(verticalScrollBar()->value() + delta);
+    }
 }
 
 void PageView::slotDragScroll()
@@ -4964,7 +5062,7 @@ void PageView::slotAutoScrollUp()
     if ( d->scrollIncrement < -9 )
         return;
     d->scrollIncrement--;
-    slotAutoScoll();
+    slotAutoScroll();
     setFocus();
 }
 
@@ -4973,7 +5071,7 @@ void PageView::slotAutoScrollDown()
     if ( d->scrollIncrement > 9 )
         return;
     d->scrollIncrement++;
-    slotAutoScoll();
+    slotAutoScroll();
     setFocus();
 }
 

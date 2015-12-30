@@ -389,6 +389,11 @@
           </item>
           <item>
            <property name="text">
+            <string>Auto Scroll</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
             <string>Disabled</string>
            </property>
           </item>

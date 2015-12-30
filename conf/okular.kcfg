@@ -92,6 +92,7 @@
    <choices>
     <choice name="Zoom" />
     <choice name="Drag" />
+    <choice name="AutoScroll" />
     <choice name="Disabled" />
    </choices>
   </entry>

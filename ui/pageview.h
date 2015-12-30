@@ -194,6 +194,7 @@ Q_OBJECT
         // middle mouse button press behaviour
         bool middlePressZoomEnabled() const;
         bool middlePressDragEnabled() const;
+        bool middlePressAutoScrollEnabled() const;
 
         // don't want to expose classes in here
         class PageViewPrivate * d;
@@ -210,7 +211,7 @@ Q_OBJECT
         // activated by the viewport move timer
         void slotMoveViewport();
         // activated by the autoscroll timer (Shift+Up/Down keys)
-        void slotAutoScoll();
+        void slotAutoScroll();
         // activated by the dragScroll timer
         void slotDragScroll();
         // show the welcome message

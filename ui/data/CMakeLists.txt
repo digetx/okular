@@ -18,6 +18,7 @@ install(FILES
    DESTINATION ${DATA_INSTALL_DIR}/okular/pics)
 # install annotation page images
 install(FILES
+   autoscroll.png
    checkmark.png
    circle.png
    comment.png
